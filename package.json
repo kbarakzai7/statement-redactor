@@ -1,0 +1,8 @@
+{
+  "name": "statement-redactor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Redact account numbers, names and other personal details from PDF statements, entirely in the browser.",
+  "scripts": { "build": "node build.js" },
+  "dependencies": { "pdf-lib": "1.17.1", "pdfjs-dist": "3.11.174" }
+}
