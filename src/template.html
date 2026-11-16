@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Statement Redactor</title>
+<style>
+  :root {
+    --ink: #17202a;
+    --ink-2: #45505c;
+    --ink-3: #7a848f;
+    --line: #dde2e7;
+    --bg: #f4f6f8;
+    --panel: #ffffff;
+    --accent: #1f5f8b;
+    --accent-2: #174a6c;
+    --ok: #1d7a4a;
+    --warn: #9a5b00;
+    --bad: #b3261e;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink); background: var(--bg);
+  }
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 14px 22px; background: var(--ink); color: #fff;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  .privacy {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 12.5px; color: #cfe3d6; background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.15); padding: 4px 10px; border-radius: 99px;
+  }
+  .privacy svg { flex: none; }
+  .layout { display: grid; grid-template-columns: 320px 1fr; min-height: calc(100% - 52px); }
+  aside {
+    background: var(--panel); border-right: 1px solid var(--line);
+    padding: 18px; overflow-y: auto;
+  }
+  main { padding: 18px 22px 60px; overflow: auto; min-width: 0; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .7px; color: var(--ink-3); margin: 22px 0 8px; font-weight: 650; }
+  h2:first-child { margin-top: 0; }
+  .drop {
+    border: 1.5px dashed #b7c1cb; border-radius: var(--radius); padding: 22px 14px;
+    text-align: center; background: #fafbfc; cursor: pointer; transition: .15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: #eef5fa; }
+  .drop strong { display: block; font-size: 14px; margin-bottom: 3px; }
+  .drop span { color: var(--ink-3); font-size: 12.5px; }
+  textarea {
+    width: 100%; min-height: 84px; resize: vertical; border: 1px solid var(--line);
+    border-radius: 6px; padding: 8px 9px; font: inherit; font-size: 13px; color: var(--ink);
+  }
+  textarea:focus, select:focus { outline: 2px solid #9cc3de; outline-offset: 0; }
+  .hint { color: var(--ink-3); font-size: 12px; margin: 5px 0 0; }
+  .cats { display: grid; gap: 2px; }
+  .cat {
+    display: grid; grid-template-columns: 18px 12px 1fr auto; align-items: center; gap: 8px;
+    padding: 5px 6px; border-radius: 6px; cursor: pointer; user-select: none;
+  }
+  .cat:hover { background: #f2f5f7; }
+  .cat input { margin: 0; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; }
+  .count { font-variant-numeric: tabular-nums; color: var(--ink-3); font-size: 12px; min-width: 18px; text-align: right; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  select { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; background: #fff; width: 100%; }
+  label.check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; cursor: pointer; margin-top: 8px; }
+  label.check input { margin-top: 3px; }
+  button {
+    font: inherit; border-radius: 6px; border: 1px solid var(--line); background: #fff; color: var(--ink);
+    padding: 7px 12px; cursor: pointer; font-weight: 550;
+  }
+  button:hover { border-color: #b7c1cb; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: var(--accent-2); }
+  button:disabled { opacity: .5; cursor: default; }
+  .empty {
+    max-width: 640px; margin: 60px auto; text-align: center; color: var(--ink-2);
+  }
+  .empty h3 { color: var(--ink); font-size: 20px; margin: 0 0 10px; }
+  .steps { text-align: left; display: grid; gap: 10px; margin-top: 22px; }
+  .step { display: grid; grid-template-columns: 26px 1fr; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+  .step b.n { width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; font-size: 12px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tab {
+    border: 1px solid var(--line); background: var(--panel); padding: 6px 10px; border-radius: 6px;
+    cursor: pointer; font-size: 13px; display: flex; gap: 8px; align-items: center; max-width: 280px;
+  }
+  .tab .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .tab .x { color: var(--ink-3); padding: 0 2px; }
+  .tab .x:hover { color: var(--bad); }
+  .toolbar {
+    position: sticky; top: 0; z-index: 5; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 10px 12px; margin-bottom: 14px; box-shadow: 0 2px 8px rgba(20,30,40,.05);
+  }
+  .toolbar .sp { flex: 1; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 6px 10px; font-weight: 500; }
+  .seg button.on { background: var(--ink); color: #fff; }
+  .summary { font-size: 13px; color: var(--ink-2); }
+  .summary b { color: var(--ink); }
+  .status { font-size: 13px; padding: 9px 12px; border-radius: 6px; margin-bottom: 12px; display: none; }
+  .status.show { display: block; }
+  .status.ok { background: #e7f4ec; color: var(--ok); border: 1px solid #bfe0cb; }
+  .status.warn { background: #fdf3e2; color: var(--warn); border: 1px solid #f0d9a8; }
+  .status.bad { background: #fbe9e7; color: var(--bad); border: 1px solid #f2c4bf; }
+  .status.info { background: #eaf2f8; color: var(--accent-2); border: 1px solid #c6dbea; }
+  .pages { display: grid; gap: 18px; justify-items: center; }
+  .pagewrap { width: 100%; max-width: 900px; }
+  .pagelabel { font-size: 12px; color: var(--ink-3); margin: 0 0 5px; display: flex; justify-content: space-between; }
+  .pagelabel .warn { color: var(--warn); }
+  .page { position: relative; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 6px 18px rgba(20,30,40,.06); line-height: 0; }
+  .page canvas { width: 100%; height: auto; display: block; }
+  .overlay { position: absolute; inset: 0; cursor: crosshair; touch-action: none; }
+  .box { position: absolute; border-radius: 2px; cursor: pointer; }
+  .box.off { background: transparent !important; outline: 1.5px dashed rgba(120,130,140,.9); }
+  .final .box:not(.off) { background: #000 !important; outline: none !important; }
+  .final .box.off { outline: none !important; }
+  .box:hover { outline-width: 2px !important; }
+  .box.flash { animation: flash 1s ease 2; }
+  @keyframes flash { 50% { box-shadow: 0 0 0 4px #ffd54a; } }
+  .draft { position: absolute; border: 1.5px dashed #000; background: rgba(0,0,0,.15); pointer-events: none; }
+  .tip {
+    position: fixed; z-index: 30; pointer-events: none; background: var(--ink); color: #fff; font-size: 12px;
+    padding: 5px 8px; border-radius: 5px; max-width: 320px; line-height: 1.35; display: none;
+  }
+  details.findings { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 14px; }
+  details.findings summary { padding: 10px 12px; cursor: pointer; font-weight: 550; font-size: 13px; }
+  .ftable { max-height: 300px; overflow: auto; border-top: 1px solid var(--line); }
+  .ftable table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .ftable td, .ftable th { padding: 5px 10px; border-bottom: 1px solid #eef1f4; text-align: left; vertical-align: top; }
+  .ftable th { position: sticky; top: 0; background: #f8fafb; font-weight: 600; color: var(--ink-2); }
+  .ftable tr { cursor: pointer; }
+  .ftable tr:hover td { background: #f6f9fb; }
+  .ftable tr.off td { color: var(--ink-3); text-decoration: line-through; }
+  .ftable code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  .busy { position: fixed; inset: 0; background: rgba(244,246,248,.75); display: none; place-items: center; z-index: 40; }
+  .busy.show { display: grid; }
+  .busy .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 18px 22px; box-shadow: 0 8px 30px rgba(0,0,0,.1); min-width: 260px; text-align: center; }
+  .bar { height: 6px; background: #e6ebef; border-radius: 99px; overflow: hidden; margin-top: 10px; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+  .legend-note { font-size: 12px; color: var(--ink-3); margin-top: 10px; line-height: 1.5; }
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; }
+    aside { border-right: 0; border-bottom: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Statement Redactor</h1>
+  <span class="privacy">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+    Runs entirely in your browser. Files are never uploaded.
+  </span>
+</header>
+
+<div class="layout">
+  <aside>
+    <h2>1. Add PDFs</h2>
+    <div class="drop" id="drop" tabindex="0" role="button">
+      <strong>Drop PDFs here or click to choose</strong>
+      <span>Credit card, bank and other statements</span>
+    </div>
+    <input type="file" id="file" accept="application/pdf,.pdf" multiple hidden>
+
+    <h2>2. Names &amp; words to always redact</h2>
+    <textarea id="custom" placeholder="One per line, for example:&#10;Jane Doe&#10;John Doe&#10;Maple Crescent"></textarea>
+    <p class="hint">Not case sensitive. Matches on every page of every file.</p>
+    <label class="check"><input type="checkbox" id="splitNames" checked> Also redact each part of a name on its own (catches "DOE J" and first-name-only mentions)</label>
+
+    <h2>3. What to find automatically</h2>
+    <div class="cats" id="cats"></div>
+    <p class="legend-note">Click any box on a page to turn it off or back on. Drag on a page to add your own box. Manual boxes are removed with a click.</p>
+
+    <h2>Output quality</h2>
+    <select id="dpi">
+      <option value="150">Standard (150 dpi, smaller file)</option>
+      <option value="200" selected>High (200 dpi)</option>
+      <option value="300">Print (300 dpi, larger file)</option>
+    </select>
+    <p class="hint">The redacted PDF is rebuilt from page images, so hidden text under the black boxes cannot be copied or recovered.</p>
+    <p class="hint" style="margin-top:22px">Detection is automatic and can miss things. Check every page before sharing.<br>Built with PDF.js (Apache-2.0) and pdf-lib (MIT).</p>
+  </aside>
+
+  <main id="main">
+    <div class="empty" id="empty">
+      <h3>Redact statements before you share them</h3>
+      <div>Account numbers, card numbers, names, addresses, phone numbers, emails and SIN/SSN are found for you. You review, adjust, then download a clean copy.</div>
+      <div class="steps">
+        <div class="step"><b class="n">1</b><div><b>Add one or more PDFs.</b> Text-based statements downloaded from online banking work best.</div></div>
+        <div class="step"><b class="n">2</b><div><b>Add your name and anything else personal</b> in the box on the left, for full coverage.</div></div>
+        <div class="step"><b class="n">3</b><div><b>Check every page.</b> Turn off boxes you want visible, drag to add boxes the scan missed.</div></div>
+        <div class="step"><b class="n">4</b><div><b>Download.</b> The output is checked automatically to confirm no readable text survived.</div></div>
+      </div>
+    </div>
+
+    <div id="work" hidden>
+      <div class="tabs" id="tabs"></div>
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Preview mode">
+          <button id="mHi" class="on">Review</button>
+          <button id="mFinal">Final look</button>
+        </div>
+        <span class="summary" id="summary"></span>
+        <span class="sp"></span>
+        <button id="dlAll" hidden>Download all</button>
+        <button id="dl" class="primary">Download redacted PDF</button>
+      </div>
+      <div class="status" id="status"></div>
+      <details class="findings" id="findings">
+        <summary>Everything found in this file</summary>
+        <div class="ftable"><table><thead><tr><th>Page</th><th>Type</th><th>Text</th></tr></thead><tbody id="ftbody"></tbody></table></div>
+      </details>
+      <div class="pages" id="pages"></div>
+    </div>
+  </main>
+</div>
+
+<div class="tip" id="tip"></div>
+<div class="busy" id="busy"><div class="card"><div id="busyText">Working…</div><div class="bar"><i id="busyBar"></i></div></div></div>
+
+<script type="text/plain" id="pdfjs-worker-src">/*__PDFJS_WORKER__*/</script>
+<script>/*__PDFJS__*/</script>
+<script>/*__PDFLIB__*/</script>
+<script>
+"use strict";
+(function () {
+  // ---------- PDF.js setup (worker from inline source, no network) ----------
+  const workerSrc = document.getElementById("pdfjs-worker-src").textContent;
+  const workerUrl = URL.createObjectURL(new Blob([workerSrc], { type: "text/javascript" }));
+  pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+  const PDF_OPTS = { isEvalSupported: false, disableFontFace: false, useSystemFonts: true };
+
+  // Downloads: claude.ai artifact capability when present, plain browser download otherwise.
+  let downloadsPromise = null;
+  function getDownloads() {
+    if (!downloadsPromise) {
+      downloadsPromise = (window.claude && typeof window.claude.use === "function")
+        ? window.claude.use("downloads").catch(() => null)
+        : Promise.resolve(null);
+    }
+    return downloadsPromise;
+  }
+  getDownloads();
+
+  // ---------- Categories ----------
+  const CATS = [
+    { id: "card",    label: "Card numbers",                color: "#d93f3f", on: true },
+    { id: "masked",  label: "Masked card / last 4 digits", color: "#e0742a", on: true },
+    { id: "account", label: "Account & reference numbers", color: "#c9a100", on: true },
+    { id: "govid",   label: "SIN / SSN",                   color: "#8e3fb8", on: true },
+    { id: "name",    label: "Names (auto-detected)",       color: "#2f7fd1", on: true },
+    { id: "custom",  label: "Your names & words",          color: "#1a9aa0", on: true },
+    { id: "address", label: "Addresses & postal codes",    color: "#3c9b4a", on: true },
+    { id: "phone",   label: "Phone numbers",               color: "#c2437f", on: true },
+    { id: "email",   label: "Email addresses",             color: "#6a5acd", on: true },
+    { id: "amount",  label: "Dollar amounts & balances",   color: "#7a848f", on: false },
+    { id: "manual",  label: "Boxes you drew",              color: "#222222", on: true, fixed: true },
+  ];
+  const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
+  const PRIORITY = ["card", "govid", "masked", "email", "phone", "account", "custom", "name", "address", "amount"];
+
+  // ---------- Patterns ----------
+  const PROV = "(?:ON|QC|BC|AB|MB|SK|NS|NB|NL|PE|PEI|YT|NT|NU|Ont\\.?|Ontario|Quebec|Québec|British Columbia|Alberta|Manitoba|Saskatchewan|Nova Scotia|New Brunswick|Newfoundland(?: and Labrador)?|Prince Edward Island)";
+  const USST = "(?:AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)";
+  const POSTAL = "[ABCEGHJ-NPRSTVXY]\\d[ABCEGHJ-NPRSTV-Z][ -]?\\d[ABCEGHJ-NPRSTV-Z]\\d";
+  const SUFFIX = "(?:St|Street|Ave|Avenue|Av|Rd|Road|Dr|Drive|Blvd|Boulevard|Cres|Crescent|Crt|Court|Ct|Way|Lane|Ln|Pl|Place|Terr|Terrace|Ter|Pkwy|Parkway|Hwy|Highway|Cir|Circle|Sq|Square|Trail|Trl|Gate|Gt|Gdns|Gardens|Grove|Grv|Heights|Hts|Line|Sideroad|Concession|Path|Row|Walk|Common|Close|Mews|Hill|Ridge|Park|Point|Pt|Run|Landing|Glen|Green|Bay|View|Valley|Wood|Woods|Esplanade|Promenade|Loop|Alley)";
+  const W = "[A-Za-zÀ-ÿ'’.-]+";
+
+  const RX = {
+    card: /(?<![\d])(?:\d[ -]?){12,18}\d(?![\d])/g,
+    sin: /(?<![\d])\d{3}[ -]?\d{3}[ -]?\d{3}(?![\d])/g,
+    ssn: /(?<![\d])\d{3}-\d{2}-\d{4}(?![\d])/g,
+    masked: [
+      /(?<![\w*•])(?:[Xx*•]{2,}[ -]?){1,4}\d{2,4}(?![\d])/g,
+      /(?<![\d])\d{4}[ -]?(?:[\dXx*•]{2,4}[ -]?){0,2}(?:[Xx*•]{2,}[ -]?){1,3}\d{2,4}(?![\d])/g,
+      /\b(?:ending|ends)(?: in| with)?:?\s*(\d{4})\b/gi,
+      /\blast (?:4|four) (?:digits)?:?\s*(\d{4})\b/gi,
+    ],
+    email: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
+    phone: /(?<![\w\d])(?:\+?1[ .-]?)?\(?([2-9]\d{2})\)?[ .-]?\d{3}[ .-]\d{4}(?![\d])(?:\s*(?:ext|x)\.?\s*\d{1,5})?/gi,
+    acctLong: /(?<![\d,.$])\d{7,}(?![\d]|[.,]\d)/g,
+    acctDash: /(?<![\d,.$-])\d{2,6}(?:-\d{2,12}){1,3}(?![\d]|[.,]\d)/g,
+    acctLabel: /\b(?:acc(?:oun)?t|acct|a\/c|card|member(?:ship)?|client|customer|policy|loan|ref(?:erence)?|folio|transit|institution|plan|certificate|contract|invoice|confirmation|authori[sz]ation|auth|id)\b\.?\s*(?:no\.?|number|num\.?|nbr|#|id|code)?\s*[:#.]?\s*((?:[A-Z]{0,4}[0-9*•][A-Z0-9*•-]*|[Xx]{3,}[0-9-]*)(?![.,]?\d)(?:[ ](?:[A-Z]{0,4}[0-9*•][A-Z0-9*•-]*|[Xx]{3,}[0-9-]*)(?![.,]?\d)){0,5})/gi,
+    street: new RegExp("(?<![\\w])\\d{1,6}[A-Za-z]?(?:[- ]\\d{1,6})?,?\\s+(?:" + W + "\\s+){0,4}" + SUFFIX + "\\b\\.?(?:\\s+(?:N|S|E|W|NE|NW|SE|SW|North|South|East|West)\\b\\.?)?(?:,?\\s*(?:Unit|Apt|Suite|Ste|#)\\s*[\\w-]+)?", "gi"),
+    rue: /(?<![\w])\d{1,6},?\s+(?:rue|boul(?:evard)?\.?|boul\.|chemin|ch\.|av(?:enue)?\.?|montée|côte|rang|place)\s+(?:[\wÀ-ÿ'’.-]+\s*){1,4}/gi,
+    unit: /\b(?:Unit|Apt|Apartment|Suite|Ste)\.?\s*#?\s*\d[\w-]*/gi,
+    pobox: /\b(?:P\.?\s?O\.?\s*Box|Post Office Box|C\.?P\.?|Case Postale|R\.?R\.?\s*#?\s*\d+|Box)\s+\d+/gi,
+    cityProv: new RegExp("(?:(?:" + W + ")(?:\\s" + W + "){0,2},?\\s+)?" + PROV + "\\b\\.?,?\\s+" + POSTAL + "(?![\\w])", "g"),
+    postal: new RegExp("(?<![\\w])" + POSTAL + "(?![\\w])", "gi"),
+    zip: new RegExp("(?:(?:" + W + ")(?:\\s" + W + "){0,2},?\\s+)?" + USST + "\\s+\\d{5}(?:-\\d{4})?(?![\\d])", "g"),
+    amount: /(?<![\w.])-?\(?\$?\s?\d{1,3}(?:[, ]\d{3})*\.\d{2}\)?(?:\s?(?:CR|DR))?(?![\d])/g,
+    nameLabel: /\b(?:name|cardholder|card holder|account ?holder|primary cardholder|authorized user|customer name|client name|member name|prepared for|statement for|dear|attn|attention|mr|mrs|ms|miss|mx|dr)\b\.?\s*[:,]?\s+((?:[A-ZÀ-Ý][A-Za-zÀ-ÿ'’-]*\.?|[A-Z]\.)(?:\s+(?:[A-ZÀ-Ý][A-Za-zÀ-ÿ'’-]*\.?|[A-Z]\.|&|and|de|van|von|der|la|le|du|da|di|bin|al)){1,4})/gi,
+  };
+  const TOLLFREE = new Set(["800", "888", "877", "866", "855", "844", "833"]);
+
+  const STOP = new Set(("account accounts statement statements summary card cards credit debit visa mastercard amex american express " +
+    "payment payments balance balances total totals new previous minimum due date dates period interest rate rates fees fee charges " +
+    "purchase purchases cash advance advances available limit points rewards reward program bank banking financial services service " +
+    "centre center customer customers client clients member members information details inquiries inquiry page pages transactions " +
+    "transaction posting posted description amount amounts the of and for your our you this that with from to in on at by is are be " +
+    "please call contact online mobile app www com ca inc ltd limited corporation corp group trust canada canadian royal dominion " +
+    "toronto montreal scotia scotiabank td rbc bmo cibc national desjardins tangerine simplii amex capital one rogers mbna pc " +
+    "financial insurance protection plan annual year month monthly daily summary activity opening closing beginning ending " +
+    "important notice notices message messages terms conditions agreement privacy policy deposit deposits withdrawal withdrawals " +
+    "cheque cheques cheq chequing savings overdraft transfer transfers e-transfer interac branch station postal box suite unit " +
+    "estimated time years months pay paid paying earned redeemed adjustment adjustments returns refund refunds credits debits " +
+    "foreign currency exchange tax taxes gst hst pst qst subtotal grand street avenue road drive north south east west total: " +
+    "statement: primary supplementary authorized user users holder holders cardholder cardholders name names mr mrs ms dr " +
+    "january february march april may june july august september october november december jan feb mar apr jun jul aug sep sept oct nov dec " +
+    "monday tuesday wednesday thursday friday saturday sunday continued next see reverse side back front copy original"
+  ).split(/\s+/));
+
+  // ---------- Helpers ----------
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const escRx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  function luhn(d) {
+    let sum = 0, alt = false;
+    for (let i = d.length - 1; i >= 0; i--) {
+      let n = d.charCodeAt(i) - 48;
+      if (alt) { n *= 2; if (n > 9) n -= 9; }
+      sum += n; alt = !alt;
+    }
+    return sum % 10 === 0;
+  }
+  const digits = (s) => s.replace(/\D/g, "");
+  const measureCtx = document.createElement("canvas").getContext("2d");
+  const nextFrame = () => new Promise(r => setTimeout(r, 0));
+
+  function busy(text, frac) {
+    $("busy").classList.toggle("show", text != null);
+    if (text != null) { $("busyText").textContent = text; $("busyBar").style.width = Math.round((frac || 0) * 100) + "%"; }
+  }
+  function status(kind, html) {
+    const el = $("status");
+    el.className = "status" + (kind ? " show " + kind : "");
+    el.innerHTML = html || "";
+  }
+
+  // ---------- State ----------
+  const files = [];      // { id, name, bytes, pdf, pages:[{num,w,h,lines,textChars,canvas}], boxes:[], disabled:Set, manual:[] }
+  let active = -1;
+  let finalLook = false;
+  let fileSeq = 0;
+  const catOn = Object.fromEntries(CATS.map(c => [c.id, c.on]));
+
+  // ---------- Sidebar: categories ----------
+  function renderCats() {
+    const f = files[active];
+    const counts = {};
+    if (f) for (const b of f.boxes) if (!b.off) counts[b.cat] = (counts[b.cat] || 0) + 1;
+    $("cats").innerHTML = CATS.map(c => `
+      <label class="cat" title="${esc(c.label)}">
+        <input type="checkbox" data-cat="${c.id}" ${catOn[c.id] ? "checked" : ""} ${c.fixed ? "disabled" : ""}>
+        <span class="swatch" style="background:${c.color}"></span>
+        <span>${esc(c.label)}</span>
+        <span class="count">${f ? (counts[c.id] || 0) : ""}</span>
+      </label>`).join("");
+    $("cats").querySelectorAll("input[data-cat]").forEach(inp => {
+      inp.addEventListener("change", () => { catOn[inp.dataset.cat] = inp.checked; rescanAll(); });
+    });
+  }
+
+  // ---------- Loading ----------
+  async function addFiles(list) {
+    const pdfs = [...list].filter(f => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    if (!pdfs.length) { status("warn", "Those files don't look like PDFs."); return; }
+    $("empty").hidden = true; $("work").hidden = false;
+    for (let i = 0; i < pdfs.length; i++) {
+      const file = pdfs[i];
+      busy(`Reading ${file.name}`, i / pdfs.length);
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const pdf = await pdfjsLib.getDocument({ data: bytes.slice(), ...PDF_OPTS }).promise;
+        const entry = { id: ++fileSeq, name: file.name, bytes, pdf, pages: [], boxes: [], disabled: new Set(), manual: [] };
+        for (let p = 1; p <= pdf.numPages; p++) {
+          busy(`Reading ${file.name}: page ${p} of ${pdf.numPages}`, (i + p / pdf.numPages) / pdfs.length);
+          entry.pages.push(await extractPage(pdf, p));
+        }
+        files.push(entry);
+        active = files.length - 1;
+      } catch (err) {
+        console.error(err);
+        const msg = /password/i.test(String(err && err.name) + String(err && err.message))
+          ? `"${esc(file.name)}" is password protected. Open it in a PDF viewer, save an unlocked copy, then add that copy.`
+          : `Couldn't open "${esc(file.name)}": ${esc(String(err && err.message || err))}`;
+        status("bad", msg);
+      }
+    }
+    busy(null);
+    if (files.length) { rescanAll(); }
+  }
+
+  async function extractPage(pdf, num) {
+    const page = await pdf.getPage(num);
+    const vp = page.getViewport({ scale: 1 });
+    const tc = await page.getTextContent({ disableCombineTextItems: false });
+    const items = [];
+    let textChars = 0;
+    for (const it of tc.items) {
+      if (!it.str) continue;
+      textChars += it.str.trim().length;
+      const tx = pdfjsLib.Util.transform(vp.transform, it.transform);
+      const fh = Math.hypot(tx[2], tx[3]);
+      const horizontal = Math.abs(tx[1]) < 0.01 * Math.abs(tx[0] || 1) && Math.abs(tx[2]) < 0.01 * Math.abs(tx[3] || 1);
+      if (fh < 1 || !horizontal) {
+        if (fh >= 1) items.push({ str: it.str, x: tx[4], base: tx[5], fh, w: (it.width || 0) * vp.scale, family: "sans-serif", rotated: true });
+        continue;
+      }
+      const style = tc.styles[it.fontName] || {};
+      let w = (it.width || 0) * vp.scale;
+      if (!w) { measureCtx.font = `${fh}px ${style.fontFamily || "sans-serif"}`; w = measureCtx.measureText(it.str).width; }
+      items.push({ str: it.str, x: tx[4], base: tx[5], fh, w, family: style.fontFamily || "sans-serif" });
+    }
+    return { num, w: vp.width, h: vp.height, lines: buildLines(items.filter(i => !i.rotated)), textChars, rendered: null };
+  }
+
+  function buildLines(items) {
+    items.sort((a, b) => a.base - b.base || a.x - b.x);
+    const lines = [];
+    for (const it of items) {
+      let line = null;
+      for (let k = lines.length - 1; k >= 0 && k >= lines.length - 4; k--) {
+        const L = lines[k];
+        if (Math.abs(L.base - it.base) < 0.45 * Math.min(L.fh, it.fh)) { line = L; break; }
+      }
+      if (!line) { line = { base: it.base, fh: it.fh, items: [] }; lines.push(line); }
+      line.items.push(it);
+      line.fh = Math.max(line.fh, it.fh);
+    }
+    for (const L of lines) {
+      L.items.sort((a, b) => a.x - b.x);
+      let text = "";
+      L.segs = [];
+      let prev = null;
+      for (const it of L.items) {
+        if (prev) {
+          const gap = it.x - (prev.x + prev.w);
+          const fh = Math.max(prev.fh, it.fh);
+          if (gap > 1.2 * fh) text += "  ";
+          else if (gap > 0.18 * fh && !/\s$/.test(prev.str) && !/^\s/.test(it.str)) text += " ";
+        }
+        L.segs.push({ it, s: text.length, e: text.length + it.str.length });
+        text += it.str;
+        prev = it;
+      }
+      L.text = text;
+      L.x0 = L.items.length ? L.items[0].x : 0;
+    }
+    lines.sort((a, b) => a.base - b.base);
+    return lines;
+  }
+
+  // Character range on a line -> rectangle in page points
+  function rangeRect(L, s, e) {
+    let x0 = Infinity, x1 = -Infinity, top = Infinity, bot = -Infinity;
+    for (const g of L.segs) {
+      if (g.e <= s || g.s >= e) continue;
+      const a = Math.max(s, g.s) - g.s, b = Math.min(e, g.e) - g.s;
+      const it = g.it, str = it.str;
+      measureCtx.font = `${it.fh}px ${it.family}`;
+      const full = measureCtx.measureText(str).width || 1;
+      const fa = measureCtx.measureText(str.slice(0, a)).width / full;
+      const fb = measureCtx.measureText(str.slice(0, b)).width / full;
+      // trim leading/trailing spaces inside the range
+      let xa = it.x + fa * it.w, xb = it.x + fb * it.w;
+      x0 = Math.min(x0, xa); x1 = Math.max(x1, xb);
+      top = Math.min(top, it.base - 0.95 * it.fh);
+      bot = Math.max(bot, it.base + 0.3 * it.fh);
+    }
+    if (!isFinite(x0)) return null;
+    const pad = 1.5;
+    return { x: x0 - pad, y: top - 0.5, w: (x1 - x0) + 2 * pad, h: (bot - top) + 1 };
+  }
+
+  // ---------- Detection ----------
+  function looksLikeName(text) {
+    const t = text.trim().replace(/[,:;]+$/, "");
+    if (!t || /\d/.test(t) || t.length > 60) return false;
+    const toks = t.split(/\s+/);
+    if (toks.length < 2 || toks.length > 6) return false;
+    let real = 0;
+    for (const tok of toks) {
+      const low = tok.toLowerCase().replace(/[.,]/g, "");
+      if (["&", "and", "de", "van", "von", "der", "la", "le", "du", "da", "di", "bin", "al"].includes(low)) continue;
+      if (!/^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’.-]*$/.test(tok)) return false;
+      if (!/^[A-ZÀ-Ý]/.test(tok)) return false;
+      if (STOP.has(low)) return false;
+      if (low.replace(/\./g, "").length >= 2) real++;
+    }
+    return real >= 2 || (real >= 1 && toks.length >= 2 && toks.some(x => /^[A-Z]\.?$/.test(x)));
+  }
+
+  function nameParts(name) {
+    return name.split(/\s+/).map(s => s.replace(/[.,]/g, "")).filter(s => s.length >= 3 && !STOP.has(s.toLowerCase()) && !["and"].includes(s.toLowerCase()));
+  }
+
+  function phraseRegex(phrase) {
+    const body = phrase.trim().split(/\s+/).map(escRx).join("[\\s,]+");
+    return new RegExp("(?<![A-Za-zÀ-ÿ0-9])" + body + "(?![A-Za-zÀ-ÿ0-9])", "gi");
+  }
+
+  function addHit(hits, cat, s, e) {
+    if (e <= s) return;
+    for (const h of hits) if (s >= h.s && e <= h.e) return;   // already fully covered
+    for (const h of hits) if (h.cat === cat && s < h.e && e > h.s) { h.s = Math.min(h.s, s); h.e = Math.max(h.e, e); return; }
+    hits.push({ cat, s, e });
+  }
+
+  function scanLine(L, hits) {
+    const t = L.text;
+    let m;
+    const run = (rx, fn) => { rx.lastIndex = 0; while ((m = rx.exec(t))) { fn(m); if (m[0].length === 0) rx.lastIndex++; } };
+
+    if (catOn.card) run(RX.card, m => { const d = digits(m[0]); if (d.length >= 13 && d.length <= 19 && luhn(d)) addHit(hits, "card", m.index, m.index + m[0].length); });
+    if (catOn.govid) {
+      run(RX.sin, m => {
+        const d = digits(m[0]);
+        const labelled = /\b(SIN|S\.I\.N|social insurance|NAS|assurance sociale)\b/i.test(t);
+        const formatted = /\d{3}[ -]\d{3}[ -]\d{3}/.test(m[0]);
+        if (luhn(d) && (labelled || formatted)) addHit(hits, "govid", m.index, m.index + m[0].length);
+      });
+      run(RX.ssn, m => addHit(hits, "govid", m.index, m.index + m[0].length));
+    }
+    if (catOn.masked) for (const rx of RX.masked) run(rx, m => {
+      if (m[1]) { const off = m.index + m[0].lastIndexOf(m[1]); addHit(hits, "masked", off, off + m[1].length); }
+      else if (/\d/.test(m[0]) && /[Xx*•]/.test(m[0])) addHit(hits, "masked", m.index, m.index + m[0].replace(/[ -]+$/, "").length);
+    });
+    if (catOn.email) run(RX.email, m => addHit(hits, "email", m.index, m.index + m[0].length));
+    if (catOn.phone) run(RX.phone, m => { if (!TOLLFREE.has(m[1])) addHit(hits, "phone", m.index, m.index + m[0].length); });
+    if (catOn.account) {
+      run(RX.acctLong, m => addHit(hits, "account", m.index, m.index + m[0].length));
+      run(RX.acctDash, m => {
+        const v = m[0];
+        if (/^(1-)?\d{3}-\d{3}-\d{4}$/.test(v)) return;                 // phone number shape
+        if (/^\d{4}-\d{2}-\d{2}$/.test(v) || /^\d{2}-\d{2}-\d{2,4}$/.test(v)) return; // dates
+        if (digits(v).length >= 7) addHit(hits, "account", m.index, m.index + v.length);
+      });
+      run(RX.acctLabel, m => {
+        const val = m[1]; if (!val) return;
+        if (digits(val).length < 3 && !/[*•Xx]{3}/.test(val)) return;
+        if (/^\d{1,2}[\/.-]\d{1,2}([\/.-]\d{2,4})?$/.test(val)) return;   // a date
+        const off = m.index + m[0].length - val.length;
+        addHit(hits, "account", off, off + val.length);
+      });
+    }
+    if (catOn.address) {
+      run(RX.street, m => addHit(hits, "address", m.index, m.index + m[0].length));
+      run(RX.rue, m => addHit(hits, "address", m.index, m.index + m[0].trimEnd().length));
+      run(RX.unit, m => addHit(hits, "address", m.index, m.index + m[0].length));
+      run(RX.pobox, m => addHit(hits, "address", m.index, m.index + m[0].length));
+      run(RX.cityProv, m => addHit(hits, "address", m.index, m.index + m[0].length));
+      run(RX.postal, m => addHit(hits, "address", m.index, m.index + m[0].length));
+      run(RX.zip, m => addHit(hits, "address", m.index, m.index + m[0].length));
+    }
+    if (catOn.amount) run(RX.amount, m => { if (/\d/.test(m[0])) addHit(hits, "amount", m.index, m.index + m[0].length); });
+  }
+
+  // Text of the left-aligned block on line L that starts near x (for address-block names)
+  function clusterNear(L, x) {
+    let start = -1;
+    for (let i = 0; i < L.segs.length; i++) if (Math.abs(L.segs[i].it.x - x) < 28) { start = i; break; }
+    if (start < 0) return null;
+    let end = start;
+    while (end + 1 < L.segs.length) {
+      const a = L.segs[end].it, b = L.segs[end + 1].it;
+      if (b.x - (a.x + a.w) > 1.2 * Math.max(a.fh, b.fh)) break;
+      end++;
+    }
+    const s = L.segs[start].s, e = L.segs[end].e;
+    return { s, e, text: L.text.slice(s, e) };
+  }
+
+  function detectNames(page, foundNames) {
+    const lines = page.lines;
+    const hitsByLine = new Map();
+    const push = (L, s, e) => {
+      if (!hitsByLine.has(L)) hitsByLine.set(L, []);
+      hitsByLine.get(L).push({ s, e });
+      foundNames.add(L.text.slice(s, e).trim().replace(/[,:;]+$/, ""));
+    };
+    // 1) labelled names: "Name: JANE DOE", "Dear Jane Doe"
+    for (const L of lines) {
+      RX.nameLabel.lastIndex = 0; let m;
+      while ((m = RX.nameLabel.exec(L.text))) {
+        let cand = m[1];
+        // stop at first stop-word
+        const toks = cand.split(/\s+/); const keep = [];
+        for (const tk of toks) { if (STOP.has(tk.toLowerCase().replace(/[.,]/g, ""))) break; keep.push(tk); }
+        cand = keep.join(" ");
+        if (looksLikeName(cand)) { const off = m.index + m[0].length - m[1].length; push(L, off, off + cand.length); }
+      }
+    }
+    // 2) mailing-address blocks: up to two name lines directly above a street / PO box line
+    for (let i = 0; i < lines.length; i++) {
+      const L = lines[i];
+      const rxs = [RX.street, RX.pobox, RX.rue];
+      for (const rx of rxs) {
+        rx.lastIndex = 0; const m = rx.exec(L.text);
+        if (!m) continue;
+        const r = rangeRect(L, m.index, m.index + 1); if (!r) continue;
+        const ax = r.x + 1.5;
+        let base = L.base, used = 0;
+        for (let k = i - 1; k >= 0 && used < 3; k--) {
+          const P = lines[k];
+          if (base - P.base > 2.4 * Math.max(P.fh, L.fh)) break;
+          if (base - P.base < 0.5 * P.fh) continue;
+          const c = clusterNear(P, ax);
+          if (!c) { base = P.base; used++; continue; }
+          if (!looksLikeName(c.text)) break;
+          push(P, c.s, c.e);
+          base = P.base; used++;
+        }
+        break;
+      }
+    }
+    return hitsByLine;
+  }
+
+  function scanFile(f) {
+    const customTerms = $("custom").value.split(/\n/).map(s => s.trim()).filter(Boolean);
+    const split = $("splitNames").checked;
+    const foundNames = new Set();
+    const nameHits = catOn.name ? f.pages.map(p => detectNames(p, foundNames)) : f.pages.map(() => new Map());
+
+    // phrases to propagate across every page
+    const phrases = [];
+    if (catOn.name) for (const n of foundNames) { phrases.push({ cat: "name", rx: phraseRegex(n) }); if (split) for (const part of nameParts(n)) phrases.push({ cat: "name", rx: phraseRegex(part) }); }
+    if (catOn.custom) for (const t of customTerms) {
+      phrases.push({ cat: "custom", rx: phraseRegex(t) });
+      if (split && t.split(/\s+/).length > 1) for (const part of nameParts(t)) phrases.push({ cat: "custom", rx: phraseRegex(part) });
+    }
+
+    const boxes = [];
+    f.pages.forEach((page, pi) => {
+      for (const L of page.lines) {
+        const hits = [];
+        scanLine(L, hits);
+        const nh = nameHits[pi].get(L);
+        if (nh) for (const h of nh) addHit(hits, "name", h.s, h.e);
+        for (const p of phrases) { p.rx.lastIndex = 0; let m; while ((m = p.rx.exec(L.text))) addHit(hits, p.cat, m.index, m.index + m[0].length); }
+        for (const h of hits) {
+          const r = rangeRect(L, h.s, h.e); if (!r) continue;
+          const key = `${pi}|${h.cat}|${Math.round(r.x)}|${Math.round(r.y)}|${Math.round(r.w)}`;
+          boxes.push({ page: pi, ...r, cat: h.cat, text: L.text.slice(h.s, h.e).trim(), key, off: f.disabled.has(key) });
+        }
+      }
+    });
+    for (const mb of f.manual) boxes.push(mb);
+    f.boxes = boxes;
+  }
+
+  function rescanAll() {
+    for (const f of files) scanFile(f);
+    renderTabs(); renderCats(); renderActive();
+  }
+
+  // ---------- Rendering ----------
+  function renderTabs() {
+    $("tabs").innerHTML = files.map((f, i) => `
+      <div class="tab ${i === active ? "active" : ""}" data-i="${i}" title="${esc(f.name)}">
+        <span class="nm">${esc(f.name)}</span><span class="count">${f.boxes.filter(b => !b.off).length}</span>
+        <span class="x" data-close="${i}" title="Remove">✕</span>
+      </div>`).join("");
+    $("tabs").querySelectorAll(".tab").forEach(el => el.addEventListener("click", (ev) => {
+      const c = ev.target.closest("[data-close]");
+      if (c) { removeFile(+c.dataset.close); return; }
+      active = +el.dataset.i; status(null); renderTabs(); renderCats(); renderActive();
+    }));
+    $("dlAll").hidden = files.length < 2;
+  }
+
+  function removeFile(i) {
+    const [f] = files.splice(i, 1);
+    try { f.pdf.destroy(); } catch (e) {}
+    if (active >= files.length) active = files.length - 1;
+    if (!files.length) { $("work").hidden = true; $("empty").hidden = false; $("pages").innerHTML = ""; renderCats(); return; }
+    renderTabs(); renderCats(); renderActive();
+  }
+
+  let renderToken = 0;
+  async function renderActive() {
+    const f = files[active]; if (!f) return;
+    const token = ++renderToken;
+    const wrap = $("pages");
+    const existing = wrap.dataset.file === String(f.id);
+    if (!existing) { wrap.innerHTML = ""; wrap.dataset.file = String(f.id); }
+    wrap.classList.toggle("final", finalLook);
+    const scanned = f.pages.filter(p => p.textChars < 5).map(p => p.num);
+    const on = f.boxes.filter(b => !b.off).length;
+    $("summary").innerHTML = `<b>${on}</b> item${on === 1 ? "" : "s"} will be blacked out across <b>${f.pages.length}</b> page${f.pages.length === 1 ? "" : "s"}`;
+    if (scanned.length && !$("status").classList.contains("ok")) {
+      status("warn", `Page${scanned.length > 1 ? "s" : ""} ${scanned.join(", ")} ${scanned.length > 1 ? "have" : "has"} no readable text (likely a scan or image), so nothing can be detected there automatically. Drag boxes over anything sensitive on ${scanned.length > 1 ? "those pages" : "that page"}.`);
+    }
+    renderFindings(f);
+
+    for (let pi = 0; pi < f.pages.length; pi++) {
+      const pg = f.pages[pi];
+      let pw = wrap.querySelector(`.pagewrap[data-p="${pi}"]`);
+      if (!pw) {
+        pw = document.createElement("div");
+        pw.className = "pagewrap"; pw.dataset.p = pi;
+        pw.innerHTML = `<div class="pagelabel"><span>Page ${pg.num} of ${f.pages.length}</span>${pg.textChars < 5 ? '<span class="warn">No readable text on this page: add boxes by dragging</span>' : ""}</div>
+          <div class="page" style="aspect-ratio:${pg.w}/${pg.h}"><canvas></canvas><div class="overlay"></div></div>`;
+        wrap.appendChild(pw);
+        attachDrawing(f, pi, pw.querySelector(".overlay"));
+      }
+      drawBoxes(f, pi, pw.querySelector(".overlay"));
+      if (!pw.dataset.rendered) {
+        pw.dataset.rendered = "1";
+        const canvas = pw.querySelector("canvas");
+        const page = await f.pdf.getPage(pg.num);
+        if (token !== renderToken && files[active] !== f) return;
+        const cssW = Math.min(900, wrap.clientWidth || 900);
+        const scale = (cssW / pg.w) * Math.min(window.devicePixelRatio || 1, 2);
+        const vp = page.getViewport({ scale });
+        canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+        await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+      }
+    }
+  }
+
+  function drawBoxes(f, pi, overlay) {
+    const pg = f.pages[pi];
+    overlay.innerHTML = "";
+    f.boxes.forEach((b, idx) => {
+      if (b.page !== pi) return;
+      const d = document.createElement("div");
+      const c = CAT[b.cat];
+      d.className = "box" + (b.off ? " off" : "");
+      d.style.left = (b.x / pg.w * 100) + "%";
+      d.style.top = (b.y / pg.h * 100) + "%";
+      d.style.width = (b.w / pg.w * 100) + "%";
+      d.style.height = (b.h / pg.h * 100) + "%";
+      d.style.background = c.color + "55";
+      d.style.outline = `1.5px solid ${c.color}`;
+      d.dataset.idx = idx;
+      d.dataset.tip = `${c.label}${b.text ? ": " + b.text : ""}\n${b.cat === "manual" ? "Click to remove" : (b.off ? "Off. Click to redact" : "Click to keep visible")}`;
+      overlay.appendChild(d);
+    });
+  }
+
+  function toggleBox(f, idx) {
+    const b = f.boxes[idx]; if (!b) return;
+    if (b.cat === "manual") {
+      f.manual = f.manual.filter(m => m !== b);
+      f.boxes.splice(idx, 1);
+    } else {
+      b.off = !b.off;
+      if (b.off) f.disabled.add(b.key); else f.disabled.delete(b.key);
+    }
+    status(null);
+    refreshBoxes(f, b.page);
+  }
+
+  function refreshBoxes(f, pi) {
+    const pw = $("pages").querySelector(`.pagewrap[data-p="${pi}"]`);
+    if (pw) drawBoxes(f, pi, pw.querySelector(".overlay"));
+    // other pages may hold boxes whose index shifted
+    $("pages").querySelectorAll(".pagewrap").forEach(w => { if (+w.dataset.p !== pi) drawBoxes(f, +w.dataset.p, w.querySelector(".overlay")); });
+    renderCats(); renderTabs(); renderFindings(f);
+    const on = f.boxes.filter(b => !b.off).length;
+    $("summary").innerHTML = `<b>${on}</b> item${on === 1 ? "" : "s"} will be blacked out across <b>${f.pages.length}</b> page${f.pages.length === 1 ? "" : "s"}`;
+  }
+
+  function attachDrawing(f, pi, overlay) {
+    let start = null, draft = null, moved = false;
+    const pt = (ev) => {
+      const r = overlay.getBoundingClientRect();
+      return { x: Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), y: Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height)) };
+    };
+    overlay.addEventListener("pointerdown", (ev) => {
+      if (ev.button !== 0) return;
+      const boxEl = ev.target.closest(".box");
+      if (boxEl) return; // handled on click
+      start = pt(ev); moved = false;
+      overlay.setPointerCapture(ev.pointerId);
+      draft = document.createElement("div"); draft.className = "draft"; overlay.appendChild(draft);
+      ev.preventDefault();
+    });
+    overlay.addEventListener("pointermove", (ev) => {
+      if (!start) return;
+      const p = pt(ev);
+      const x = Math.min(start.x, p.x), y = Math.min(start.y, p.y), w = Math.abs(p.x - start.x), h = Math.abs(p.y - start.y);
+      if (w > 0.004 || h > 0.004) moved = true;
+      Object.assign(draft.style, { left: x * 100 + "%", top: y * 100 + "%", width: w * 100 + "%", height: h * 100 + "%" });
+    });
+    const finish = (ev) => {
+      if (!start) return;
+      const p = pt(ev); const pg = f.pages[pi];
+      const x = Math.min(start.x, p.x), y = Math.min(start.y, p.y), w = Math.abs(p.x - start.x), h = Math.abs(p.y - start.y);
+      draft.remove(); draft = null; start = null;
+      if (!moved || w * pg.w < 3 || h * pg.h < 3) return;
+      const box = { page: pi, x: x * pg.w, y: y * pg.h, w: w * pg.w, h: h * pg.h, cat: "manual", text: "", key: "m" + Math.random(), off: false };
+      f.manual.push(box); f.boxes.push(box);
+      status(null);
+      refreshBoxes(f, pi);
+    };
+    overlay.addEventListener("pointerup", finish);
+    overlay.addEventListener("pointercancel", () => { if (draft) draft.remove(); draft = null; start = null; });
+    overlay.addEventListener("click", (ev) => {
+      const boxEl = ev.target.closest(".box");
+      if (boxEl) toggleBox(f, +boxEl.dataset.idx);
+    });
+  }
+
+  function renderFindings(f) {
+    const rows = f.boxes.map((b, i) => ({ b, i })).filter(r => r.b.cat !== "manual")
+      .sort((a, b) => a.b.page - b.b.page || a.b.y - b.b.y || a.b.x - b.b.x);
+    $("findings").querySelector("summary").textContent = `Everything found in this file (${rows.length})`;
+    $("ftbody").innerHTML = rows.map(({ b, i }) => `
+      <tr data-i="${i}" class="${b.off ? "off" : ""}"><td>${b.page + 1}</td>
+      <td><span class="swatch" style="display:inline-block;vertical-align:-1px;margin-right:6px;background:${CAT[b.cat].color}"></span>${esc(CAT[b.cat].label)}</td>
+      <td><code>${esc(b.text)}</code></td></tr>`).join("") || `<tr><td colspan="3">Nothing detected yet.</td></tr>`;
+    $("ftbody").querySelectorAll("tr[data-i]").forEach(tr => tr.addEventListener("click", () => {
+      const el = $("pages").querySelector(`.box[data-idx="${tr.dataset.i}"]`);
+      if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
+    }));
+  }
+
+  // tooltip
+  document.addEventListener("pointermove", (ev) => {
+    const b = ev.target.closest && ev.target.closest(".box");
+    const tip = $("tip");
+    if (!b) { tip.style.display = "none"; return; }
+    tip.textContent = b.dataset.tip; tip.style.whiteSpace = "pre-line";
+    tip.style.display = "block";
+    tip.style.left = Math.min(ev.clientX + 12, window.innerWidth - 330) + "px";
+    tip.style.top = (ev.clientY + 14) + "px";
+  });
+
+  // ---------- Export ----------
+  async function buildRedacted(f, onProgress) {
+    const dpi = +$("dpi").value;
+    const out = await PDFLib.PDFDocument.create();
+    out.setTitle("Redacted document"); out.setAuthor(""); out.setSubject(""); out.setKeywords([]);
+    out.setProducer("Statement Redactor"); out.setCreator("Statement Redactor");
+    const now = new Date(); out.setCreationDate(now); out.setModificationDate(now);
+    for (let pi = 0; pi < f.pages.length; pi++) {
+      onProgress && onProgress(pi / f.pages.length, pi + 1);
+      const pg = f.pages[pi];
+      const page = await f.pdf.getPage(pg.num);
+      const scale = dpi / 72;
+      const vp = page.getViewport({ scale });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport: vp, annotationMode: pdfjsLib.AnnotationMode.ENABLE }).promise;
+      ctx.fillStyle = "#000";
+      const sx = canvas.width / pg.w, sy = canvas.height / pg.h;
+      for (const b of f.boxes) if (b.page === pi && !b.off) {
+        ctx.fillRect(Math.floor(b.x * sx), Math.floor(b.y * sy), Math.ceil(b.w * sx) + 1, Math.ceil(b.h * sy) + 1);
+      }
+      const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.9));
+      const img = await out.embedJpg(new Uint8Array(await blob.arrayBuffer()));
+      const p = out.addPage([pg.w, pg.h]);
+      p.drawImage(img, { x: 0, y: 0, width: pg.w, height: pg.h });
+      canvas.width = canvas.height = 0;
+      await nextFrame();
+    }
+    return await out.save({ useObjectStreams: true });
+  }
+
+  async function verify(bytes) {
+    const doc = await pdfjsLib.getDocument({ data: bytes.slice(), ...PDF_OPTS }).promise;
+    let chars = 0;
+    for (let p = 1; p <= doc.numPages; p++) {
+      const tc = await (await doc.getPage(p)).getTextContent();
+      chars += tc.items.reduce((n, it) => n + (it.str || "").trim().length, 0);
+    }
+    const meta = await doc.getMetadata().catch(() => ({}));
+    await doc.destroy();
+    return { chars, pages: doc.numPages, info: meta.info || {} };
+  }
+
+  function outName(name) { return name.replace(/\.pdf$/i, "") + "-redacted.pdf"; }
+
+  async function saveBytes(filename, bytes) {
+    const dl = await getDownloads();
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    if (dl) {
+      try { await dl.save({ filename, data: blob }); return "saved"; }
+      catch (e) { if (e && e.code === "declined") return "declined"; throw e; }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return "saved";
+  }
+
+  async function exportFile(f) {
+    const offCount = f.boxes.filter(b => !b.off).length;
+    busy(`Building ${f.name}`, 0);
+    try {
+      const bytes = await buildRedacted(f, (fr, n) => busy(`Redacting page ${n} of ${f.pages.length}`, fr * 0.9));
+      busy("Checking the output for leftover text", 0.95);
+      const v = await verify(bytes);
+      busy(null);
+      if (v.chars > 0) { status("bad", `Safety check failed: the output still contains ${v.chars} characters of text. It was not saved.`); return false; }
+      const res = await saveBytes(outName(f.name), bytes);
+      const kb = Math.round(bytes.length / 1024);
+      if (res === "declined") { status("info", "Download cancelled."); return false; }
+      status("ok", `<b>Saved ${esc(outName(f.name))}</b> (${kb.toLocaleString()} KB, ${v.pages} page${v.pages === 1 ? "" : "s"}, ${offCount} redaction${offCount === 1 ? "" : "s"}). Verified: the file contains no selectable or hidden text, only flattened page images, and no metadata from the original.`);
+      return true;
+    } catch (e) {
+      busy(null); console.error(e);
+      status("bad", `Couldn't save: ${esc(String(e && (e.message || e.code) || e))}`);
+      return false;
+    }
+  }
+
+  // ---------- Wiring ----------
+  const drop = $("drop"), fileInput = $("file");
+  drop.addEventListener("click", () => fileInput.click());
+  drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); } });
+  fileInput.addEventListener("change", () => { addFiles(fileInput.files); fileInput.value = ""; });
+  ["dragenter", "dragover"].forEach(t => document.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(t => document.addEventListener(t, (e) => { e.preventDefault(); if (t === "drop" || !e.relatedTarget) drop.classList.remove("over"); }));
+  document.addEventListener("drop", (e) => { if (e.dataTransfer && e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
+
+  let customTimer = null;
+  const onCustom = () => { clearTimeout(customTimer); customTimer = setTimeout(() => { if (files.length) rescanAll(); }, 350); };
+  $("custom").addEventListener("input", onCustom);
+  $("splitNames").addEventListener("change", () => { if (files.length) rescanAll(); });
+  try { const saved = localStorage.getItem("redactor.custom"); if (saved) $("custom").value = saved; } catch (e) {}
+  $("custom").addEventListener("change", () => { try { localStorage.setItem("redactor.custom", $("custom").value); } catch (e) {} });
+
+  $("mHi").addEventListener("click", () => { finalLook = false; $("mHi").classList.add("on"); $("mFinal").classList.remove("on"); $("pages").classList.remove("final"); });
+  $("mFinal").addEventListener("click", () => { finalLook = true; $("mFinal").classList.add("on"); $("mHi").classList.remove("on"); $("pages").classList.add("final"); });
+  $("dl").addEventListener("click", () => { const f = files[active]; if (f) exportFile(f); });
+  $("dlAll").addEventListener("click", async () => {
+    let ok = 0;
+    for (let i = 0; i < files.length; i++) { active = i; renderTabs(); renderCats(); await renderActive(); if (await exportFile(files[i])) ok++; }
+    if (ok === files.length) status("ok", `All ${ok} files saved and verified: no readable text remains in any of them.`);
+  });
+  window.addEventListener("resize", () => { /* canvases scale with CSS; nothing to do */ });
+
+  renderCats();
+  // Test hook (harmless in normal use)
+  window.__redactor = { files, rescanAll, buildRedacted, verify, addFiles };
+})();
+</script>
+</body>
+</html>
