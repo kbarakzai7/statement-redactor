@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Statement Redactor</title>
+<meta name="description" content="Redact account numbers, names and addresses from PDF statements and credit reports. Runs entirely on your device.">
+<meta name="theme-color" content="#17202a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Redactor">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>
   :root {
     --ink: #17202a;
@@ -256,16 +264,19 @@
     { id: "masked",  label: "Masked card / last 4 digits", color: "#e0742a", on: true },
     { id: "account", label: "Account & reference numbers", color: "#c9a100", on: true },
     { id: "govid",   label: "SIN / SSN",                   color: "#8e3fb8", on: true },
+    { id: "dob",     label: "Dates of birth",              color: "#a0612d", on: true },
     { id: "name",    label: "Names (auto-detected)",       color: "#2f7fd1", on: true },
     { id: "custom",  label: "Your names & words",          color: "#1a9aa0", on: true },
     { id: "address", label: "Addresses & postal codes",    color: "#3c9b4a", on: true },
     { id: "phone",   label: "Phone numbers",               color: "#c2437f", on: true },
     { id: "email",   label: "Email addresses",             color: "#6a5acd", on: true },
+    { id: "employer", label: "Employer & occupation",      color: "#5b7083", on: true },
     { id: "amount",  label: "Dollar amounts & balances",   color: "#7a848f", on: false },
     { id: "manual",  label: "Boxes you drew",              color: "#222222", on: true, fixed: true },
   ];
   const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
-  const PRIORITY = ["card", "govid", "masked", "email", "phone", "account", "custom", "name", "address", "amount"];
+  const IS_TOUCH = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  const PRIORITY = ["card", "govid", "dob", "masked", "email", "phone", "account", "custom", "name", "employer", "address", "amount"];
 
   // ---------- Patterns ----------
   const PROV = "(?:ON|QC|BC|AB|MB|SK|NS|NB|NL|PE|PEI|YT|NT|NU|Ont\\.?|Ontario|Quebec|Québec|British Columbia|Alberta|Manitoba|Saskatchewan|Nova Scotia|New Brunswick|Newfoundland(?: and Labrador)?|Prince Edward Island)";
@@ -287,7 +298,7 @@
     email: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
     phone: /(?<![\w\d])(?:\+?1[ .-]?)?\(?([2-9]\d{2})\)?[ .-]?\d{3}[ .-]\d{4}(?![\d])(?:\s*(?:ext|x)\.?\s*\d{1,5})?/gi,
     acctLong: /(?<![\d,.$])\d{7,}(?![\d]|[.,]\d)/g,
-    acctDash: /(?<![\d,.$-])\d{2,6}(?:-\d{2,12}){1,3}(?![\d]|[.,]\d)/g,
+    acctDash: /(?<![\w,.$-])(?:[A-Z]{1,5}-)?\d{2,6}(?:-\d{2,12}){1,3}(?![\d]|[.,]\d)/g,
     acctLabel: /\b(?:acc(?:oun)?t|acct|a\/c|card|member(?:ship)?|client|customer|policy|loan|ref(?:erence)?|folio|transit|institution|plan|certificate|contract|invoice|confirmation|authori[sz]ation|auth|id)\b\.?\s*(?:no\.?|number|num\.?|nbr|#|id|code)?\s*[:#.]?\s*((?:[A-Z]{0,4}[0-9*•][A-Z0-9*•-]*|[Xx]{3,}[0-9-]*)(?![.,]?\d)(?:[ ](?:[A-Z]{0,4}[0-9*•][A-Z0-9*•-]*|[Xx]{3,}[0-9-]*)(?![.,]?\d)){0,5})/gi,
     street: new RegExp("(?<![\\w])\\d{1,6}[A-Za-z]?(?:[- ]\\d{1,6})?,?\\s+(?:" + W + "\\s+){0,4}" + SUFFIX + "\\b\\.?(?:\\s+(?:N|S|E|W|NE|NW|SE|SW|North|South|East|West)\\b\\.?)?(?:,?\\s*(?:Unit|Apt|Suite|Ste|#)\\s*[\\w-]+)?", "gi"),
     rue: /(?<![\w])\d{1,6},?\s+(?:rue|boul(?:evard)?\.?|boul\.|chemin|ch\.|av(?:enue)?\.?|montée|côte|rang|place)\s+(?:[\wÀ-ÿ'’.-]+\s*){1,4}/gi,
@@ -297,7 +308,17 @@
     postal: new RegExp("(?<![\\w])" + POSTAL + "(?![\\w])", "gi"),
     zip: new RegExp("(?:(?:" + W + ")(?:\\s" + W + "){0,2},?\\s+)?" + USST + "\\s+\\d{5}(?:-\\d{4})?(?![\\d])", "g"),
     amount: /(?<![\w.])-?\(?\$?\s?\d{1,3}(?:[, ]\d{3})*\.\d{2}\)?(?:\s?(?:CR|DR))?(?![\d])/g,
-    nameLabel: /\b(?:name|cardholder|card holder|account ?holder|primary cardholder|authorized user|customer name|client name|member name|prepared for|statement for|dear|attn|attention|mr|mrs|ms|miss|mx|dr)\b\.?\s*[:,]?\s+((?:[A-ZÀ-Ý][A-Za-zÀ-ÿ'’-]*\.?|[A-Z]\.)(?:\s+(?:[A-ZÀ-Ý][A-Za-zÀ-ÿ'’-]*\.?|[A-Z]\.|&|and|de|van|von|der|la|le|du|da|di|bin|al)){1,4})/gi,
+    nameLabel: (() => {
+      const ci = (s) => s.replace(/[a-z]/gi, ch => "[" + ch.toUpperCase() + ch.toLowerCase() + "]").replace(/ /g, "\\s+");
+      const labels = ["name", "full name", "legal name", "cardholder", "card holder", "account ?holder", "primary cardholder", "authorized user",
+        "customer name", "client name", "member name", "prepared for", "statement for", "report for", "dear", "attn", "attention",
+        "also known as", "aka", "a\\.k\\.a\\.", "former name", "previous name", "other names?", "spouse", "co-applicant", "co-borrower",
+        "joint applicant", "applicant", "borrower", "mr", "mrs", "ms", "miss", "mx", "dr", "nom"].map(ci);
+      const TOK = "(?:[A-ZÀ-Ý][A-Za-zÀ-ÿ'’-]*\\.?|[A-Z]\\.)";
+      return new RegExp("\\b(?:" + labels.join("|") + ")\\b\\.?\\s*[:,]?[ ]+(" + TOK + "(?:[ ](?:" + TOK + "|&|and|de|van|von|der|la|le|du|da|di|bin|al)){1,4})", "g");
+    })(),
+    dob: /\b(?:date of birth|birth ?date|d\.?o\.?b\.?|born(?: on)?|date de naissance|n[ée]e? le)\.?\s*[:#]?\s*(\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2}|\d{1,2}[-\/.]\d{1,2}[-\/.]\d{2,4}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|janv|févr|mars|avr|mai|juin|juil|août|sept|déc)[a-zéû]*\.? \d{1,2},? \d{4}|\d{1,2} (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|janv|févr|mars|avr|mai|juin|juil|août|sept|déc)[a-zéû]*\.? \d{4}|\d{4}[-\/]\d{1,2}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d{4})/gi,
+    employer: /\b(?:employer|employed by|place of employment|occupation|job title|employeur|profession)\s*[:#]\s*([^ :][^:]*?)(?=  |$)/gi,
   };
   const TOLLFREE = new Set(["800", "888", "877", "866", "855", "844", "833"]);
 
@@ -315,7 +336,9 @@
     "foreign currency exchange tax taxes gst hst pst qst subtotal grand street avenue road drive north south east west total: " +
     "statement: primary supplementary authorized user users holder holders cardholder cardholders name names mr mrs ms dr " +
     "january february march april may june july august september october november december jan feb mar apr jun jul aug sep sept oct nov dec " +
-    "monday tuesday wednesday thursday friday saturday sunday continued next see reverse side back front copy original"
+    "monday tuesday wednesday thursday friday saturday sunday continued next see reverse side back front copy original " +
+    "mortgage mortgages finance financing auto hydro energy gas telecom mobility wireless leasing lending collection collections agency " +
+    "union report reports consumer bureau score inquiry inquiries creditor creditors also known former previous current other"
   ).split(/\s+/));
 
   // ---------- Helpers ----------
@@ -396,7 +419,10 @@
       }
     }
     busy(null);
-    if (files.length) { rescanAll(); }
+    if (files.length) {
+      rescanAll();
+      if (window.innerWidth <= 860) $("work").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }
 
   async function extractPage(pdf, num) {
@@ -442,6 +468,12 @@
       L.segs = [];
       let prev = null;
       for (const it of L.items) {
+        if (!it.str.trim()) {
+          // whitespace-only item: PDF.js uses these to span column gaps
+          if (text && !/\s$/.test(text)) text += it.w > 1.2 * it.fh ? "  " : " ";
+          else if (text && it.w > 1.2 * it.fh && !/  $/.test(text)) text += " ";
+          continue;
+        }
         if (prev) {
           const gap = it.x - (prev.x + prev.w);
           const fh = Math.max(prev.fh, it.fh);
@@ -561,6 +593,8 @@
       run(RX.postal, m => addHit(hits, "address", m.index, m.index + m[0].length));
       run(RX.zip, m => addHit(hits, "address", m.index, m.index + m[0].length));
     }
+    if (catOn.dob) run(RX.dob, m => { const off = m.index + m[0].length - m[1].length; addHit(hits, "dob", off, off + m[1].length); });
+    if (catOn.employer) run(RX.employer, m => { const v = m[1].trimEnd(); if (v.length >= 2) { const off = m.index + m[0].length - m[1].length; addHit(hits, "employer", off, off + v.length); } });
     if (catOn.amount) run(RX.amount, m => { if (/\d/.test(m[0])) addHit(hits, "amount", m.index, m.index + m[0].length); });
   }
 
@@ -591,10 +625,12 @@
     for (const L of lines) {
       RX.nameLabel.lastIndex = 0; let m;
       while ((m = RX.nameLabel.exec(L.text))) {
+        if (/(creditor|company|business|merchant|bank|lender|employer|institution|subscriber|payee|branch|product|plan|file|user)\s*$/i.test(L.text.slice(Math.max(0, m.index - 16), m.index))) continue;
         let cand = m[1];
-        // stop at first stop-word
+        // stop at first stop-word, then drop trailing words until it reads as a name
         const toks = cand.split(/\s+/); const keep = [];
         for (const tk of toks) { if (STOP.has(tk.toLowerCase().replace(/[.,]/g, ""))) break; keep.push(tk); }
+        while (keep.length > 2 && !looksLikeName(keep.join(" "))) keep.pop();
         cand = keep.join(" ");
         if (looksLikeName(cand)) { const off = m.index + m[0].length - m[1].length; push(L, off, off + cand.length); }
       }
@@ -891,6 +927,8 @@
       try { await dl.save({ filename, data: blob }); return "saved"; }
       catch (e) { if (e && e.code === "declined") return "declined"; throw e; }
     }
+    const file = new File([blob], filename, { type: "application/pdf" });
+    if (IS_TOUCH && navigator.canShare && navigator.canShare({ files: [file] })) return { mode: "share", file };
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
@@ -910,6 +948,20 @@
       const res = await saveBytes(outName(f.name), bytes);
       const kb = Math.round(bytes.length / 1024);
       if (res === "declined") { status("info", "Download cancelled."); return false; }
+      if (res && res.mode === "share") {
+        status("ok", `<b>Ready: ${esc(outName(f.name))}</b> (${kb.toLocaleString()} KB). Verified: no selectable or hidden text remains.<br><button class="primary" id="shareBtn" style="margin-top:8px">Save or share the PDF</button>`);
+        $("shareBtn").addEventListener("click", async () => {
+          try { await navigator.share({ files: [res.file], title: outName(f.name) }); }
+          catch (e) {
+            if (e && e.name === "AbortError") return;
+            const url = URL.createObjectURL(res.file);
+            const a = document.createElement("a"); a.href = url; a.download = res.file.name;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+          }
+        });
+        return true;
+      }
       status("ok", `<b>Saved ${esc(outName(f.name))}</b> (${kb.toLocaleString()} KB, ${v.pages} page${v.pages === 1 ? "" : "s"}, ${offCount} redaction${offCount === 1 ? "" : "s"}). Verified: the file contains no selectable or hidden text, only flattened page images, and no metadata from the original.`);
       return true;
     } catch (e) {
@@ -946,6 +998,18 @@
   window.addEventListener("resize", () => { /* canvases scale with CSS; nothing to do */ });
 
   renderCats();
+
+  // Installed app: offline support, and "Open with" for PDFs on desktop.
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+    window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+  }
+  if ("launchQueue" in window) {
+    window.launchQueue.setConsumer(async (params) => {
+      if (!params.files || !params.files.length) return;
+      const list = await Promise.all(params.files.map(h => h.getFile()));
+      addFiles(list);
+    });
+  }
   // Test hook (harmless in normal use)
   window.__redactor = { files, rescanAll, buildRedacted, verify, addFiles };
 })();
